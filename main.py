@@ -71,9 +71,11 @@ def _render_visualization(df: pd.DataFrame) -> None:
     try:
         importlib.import_module("hvplot.pandas")
         hv = importlib.import_module("holoviews")
+        st_bokeh_module = importlib.import_module("streamlit_bokeh")
+        streamlit_bokeh_fn = getattr(st_bokeh_module, "streamlit_bokeh")
     except ImportError as exc:
         raise RuntimeError(
-            "hvPlot and HoloViews are required for visualization. Install the packages in requirements.txt."
+            "hvPlot, HoloViews, and streamlit-bokeh are required for visualization. Install the packages in requirements.txt."
         ) from exc
 
     hv.extension("bokeh")
@@ -123,7 +125,7 @@ def _render_visualization(df: pd.DataFrame) -> None:
             x=x, y=y, height=420, responsive=True, rot=45, title=f"{y} by {x}"
         )
 
-    st.bokeh_chart(hv.render(chart, backend="bokeh"), use_container_width=True)
+    streamlit_bokeh_fn(hv.render(chart, backend="bokeh"), key="querylite_chart")
 
 
 # -- Main app ------------------------------------------------------------------
@@ -255,7 +257,7 @@ def main() -> None:
         if result_df.empty:
             st.warning("No data found.")
         else:
-            st.dataframe(result_df, use_container_width=True)
+            st.dataframe(result_df, width="stretch")
 
         st.subheader("Next Step")
         action = st.radio(
