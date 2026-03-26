@@ -2,4 +2,8 @@ streamlit>=1.36.0
 pandas>=2.2.0
 python-dotenv>=1.0.1
 groq>=0.11.0
+langgraph>=0.2.34
+hvplot>=0.10.0
+holoviews>=1.19.0
+bokeh>=3.4.0
  
