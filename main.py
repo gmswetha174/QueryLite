@@ -134,9 +134,8 @@ def main() -> None:
     load_dotenv(APP_DIR / ".env")
 
     st.set_page_config(page_title="QueryLite", page_icon="magnifying glass", layout="wide")
-    st.title("QueryLite: Agentic Text-to-SQL Workflow")
-    st.caption("Classifier -> SQL draft -> approval -> retrieval -> summary or visualization")
-
+    st.title("QueryLite: Turn Questions into Data Insights")
+    
     # -- Database setup --------------------------------------------------------
     try:
         csv_sig = get_csv_signature(CSV_PATH)
