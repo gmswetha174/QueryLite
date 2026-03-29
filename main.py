@@ -10,7 +10,6 @@ from db import (
     DEFAULT_LIMIT,
     extract_allowed_tables,
     extract_schema,
-    extract_schema_metadata,
     get_csv_signature,
     load_csv_and_create_db,
 )
@@ -58,21 +57,13 @@ def _reset_workflow(schema_text: str, schema_metadata: dict) -> None:
     st.session_state._reset_post_query_action = True
 
 
-def _apply_deferred_resets() -> None:
-    if st.session_state.pop("_clear_question_input", False):
-        st.session_state.question_input = ""
-    if st.session_state.pop("_reset_post_query_action", False):
-        st.session_state.post_query_action = "Summarize"
-
-
 # -- Visualization -------------------------------------------------------------
 
-def _render_visualization(df: pd.DataFrame) -> None:
+def _render_visualization(df: pd.DataFrame, user_question: str = "") -> None:
     try:
         importlib.import_module("hvplot.pandas")
         hv = importlib.import_module("holoviews")
-        st_bokeh_module = importlib.import_module("streamlit_bokeh")
-        streamlit_bokeh_fn = getattr(st_bokeh_module, "streamlit_bokeh")
+        streamlit_bokeh_fn = getattr(importlib.import_module("streamlit_bokeh"), "streamlit_bokeh")
     except ImportError as exc:
         raise RuntimeError(
             "hvPlot, HoloViews, and streamlit-bokeh are required for visualization. Install the packages in requirements.txt."
@@ -88,41 +79,28 @@ def _render_visualization(df: pd.DataFrame) -> None:
     all_cols = list(df.columns)
     category_cols = [c for c in all_cols if c not in numeric_cols]
 
-    chart_options: list[str] = []
-    if numeric_cols:
-        chart_options.append("Histogram")
-    if len(numeric_cols) >= 2:
-        chart_options.append("Scatter")
-    if numeric_cols and category_cols:
-        chart_options.extend(["Bar", "Line"])
-
-    if not chart_options:
+    if not numeric_cols:
         st.info("No numeric columns available for visualization.")
         return
 
-    chart_type = st.selectbox("Chart type", chart_options, key="chart_type")
+    from llm import recommend_chart
+    cfg = recommend_chart(numeric_cols, category_cols, all_cols, user_question)
+    chart_type = cfg.get("chart_type", "Histogram")
+    title = cfg.get("title", chart_type)
+    x = cfg.get("x", numeric_cols[0])
+    y = cfg.get("y", numeric_cols[0])
 
     if chart_type == "Histogram":
-        col = st.selectbox("Numeric column", numeric_cols, key="hist_col")
-        chart = df[col].dropna().hvplot.hist(
-            bins=min(30, max(10, len(df))), height=420, responsive=True, title=f"Distribution of {col}"
+        chart = df[x].dropna().hvplot.hist(
+            bins=min(30, max(10, len(df))), height=420, responsive=True, title=title
         )
     elif chart_type == "Scatter":
-        x = st.selectbox("X-axis", numeric_cols, key="scatter_x")
-        y_opts = [c for c in numeric_cols if c != x] or numeric_cols
-        y = st.selectbox("Y-axis", y_opts, key="scatter_y")
-        chart = df.hvplot.scatter(x=x, y=y, height=420, responsive=True, title=f"{y} vs {x}")
+        chart = df.hvplot.scatter(x=x, y=y, height=420, responsive=True, title=title)
     elif chart_type == "Line":
-        x_default = category_cols[0] if category_cols else all_cols[0]
-        x = st.selectbox("X-axis", all_cols, index=all_cols.index(x_default), key="line_x")
-        y = st.selectbox("Y-axis", numeric_cols, key="line_y")
-        chart = df[[x, y]].dropna().hvplot.line(x=x, y=y, height=420, responsive=True, title=f"{y} by {x}")
+        chart = df[[x, y]].dropna().hvplot.line(x=x, y=y, height=420, responsive=True, title=title)
     else:  # Bar
-        x_default = category_cols[0] if category_cols else all_cols[0]
-        x = st.selectbox("Category column", all_cols, index=all_cols.index(x_default), key="bar_x")
-        y = st.selectbox("Value column", numeric_cols, key="bar_y")
         chart = df[[x, y]].dropna().head(DEFAULT_LIMIT).hvplot.bar(
-            x=x, y=y, height=420, responsive=True, rot=45, title=f"{y} by {x}"
+            x=x, y=y, height=420, responsive=True, rot=45, title=title
         )
 
     streamlit_bokeh_fn(hv.render(chart, backend="bokeh"), key="querylite_chart")
@@ -142,8 +120,7 @@ def main() -> None:
         if st.session_state.get("csv_signature") != csv_sig:
             with st.spinner("Preparing database and schema..."):
                 table_name = load_csv_and_create_db(CSV_PATH, DB_PATH)
-                schema_text = extract_schema(DB_PATH)
-                schema_metadata = extract_schema_metadata(DB_PATH)
+                schema_text, schema_metadata = extract_schema(DB_PATH)
             st.session_state.update({
                 "csv_signature": csv_sig,
                 "table_name": table_name,
@@ -160,7 +137,10 @@ def main() -> None:
         st.stop()
 
     _init_session_state(schema_text, schema_metadata)
-    _apply_deferred_resets()
+    if st.session_state.pop("_clear_question_input", False):
+        st.session_state.question_input = ""
+    if st.session_state.pop("_reset_post_query_action", False):
+        st.session_state.post_query_action = "Summarize"
     state = cast(WorkflowState, st.session_state.workflow_state)
 
     # -- Schema info -----------------------------------------------------------
@@ -252,6 +232,7 @@ def main() -> None:
             state.get("result_rows", []),
             columns=state.get("result_columns", []),
         )
+        result_df = result_df.apply(pd.to_numeric, errors="ignore")
         st.subheader("Retrieved Rows")
         if result_df.empty:
             st.warning("No data found.")
@@ -268,7 +249,7 @@ def main() -> None:
         if action == "Summarize":
             st.text(state.get("summary_text", "No summary available."))
         else:
-            _render_visualization(result_df)
+            _render_visualization(result_df, state.get("user_question", ""))
 
 
 if __name__ == "__main__":

@@ -93,15 +93,6 @@ def _result_handler_node(state: WorkflowState) -> WorkflowState:
         }
 
 
-# ── Routing ───────────────────────────────────────────────────────────────────
-
-def _route_after_classifier(state: WorkflowState) -> str:
-    return "text_to_sql" if state.get("classifier_allowed") else "__end__"
-
-
-def _route_after_sql(state: WorkflowState) -> str:
-    return "result_handler" if (state.get("approved_sql") and state.get("generated_sql")) else "__end__"
-
 
 # ── Workflow builder ──────────────────────────────────────────────────────────
 
@@ -121,7 +112,13 @@ def compile_workflow() -> Any:
     builder.add_node("text_to_sql", _text_to_sql_node)
     builder.add_node("result_handler", _result_handler_node)
     builder.set_entry_point("classifier")
-    builder.add_conditional_edges("classifier", _route_after_classifier)
-    builder.add_conditional_edges("text_to_sql", _route_after_sql)
+    builder.add_conditional_edges(
+        "classifier",
+        lambda s: "text_to_sql" if s.get("classifier_allowed") else "__end__",
+    )
+    builder.add_conditional_edges(
+        "text_to_sql",
+        lambda s: "result_handler" if (s.get("approved_sql") and s.get("generated_sql")) else "__end__",
+    )
     builder.add_edge("result_handler", END)
     return builder.compile()

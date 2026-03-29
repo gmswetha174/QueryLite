@@ -65,3 +65,33 @@ Preview (up to {preview_limit} rows):
 Write a concise natural-language summary of what the data shows.
 Highlight key patterns, notable values, or statistics. Be factual and brief.\
 """
+
+CHART_SYSTEM = "You are a data visualization expert. Return only valid JSON."
+
+CHART_TEMPLATE = """\
+Recommend the best chart type to visualize query results for the user's question.
+
+Numeric columns: {numeric_cols}
+Category columns: {category_cols}
+All columns: {all_cols}
+
+<USER_QUESTION>
+{user_question}
+</USER_QUESTION>
+
+Choose one of: Histogram, Scatter, Bar, Line.
+Return JSON using only column names from the lists above:
+- Histogram: {{"chart_type": "Histogram", "x": "<numeric_col>", "title": "<short title>"}}
+- Others:    {{"chart_type": "<type>", "x": "<col>", "y": "<numeric_col>", "title": "<short title>"}}\
+"""
+
+TYPE_SYSTEM = "You are a database schema expert. Return only valid JSON."
+
+TYPE_TEMPLATE = """\
+Infer the SQLite storage type (INTEGER, REAL, or TEXT) for each CSV column from the sample values.
+
+{samples}
+
+Return JSON mapping every column name to its type:
+{{"col1": "INTEGER", "col2": "REAL", "col3": "TEXT"}}\
+"""
